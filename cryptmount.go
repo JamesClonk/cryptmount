@@ -3,11 +3,19 @@ package main
 import (
 	"fmt"
 	"os"
+	"text/tabwriter"
 
 	"github.com/codegangsta/cli"
+	"github.com/fatih/color"
 )
 
 const VERSION = "0.0.1"
+
+var (
+	blink   = color.New(color.BlinkSlow).SprintfFunc()
+	bold    = color.New(color.Bold).SprintfFunc()
+	magenta = color.New(color.FgMagenta).SprintfFunc()
+)
 
 func main() {
 	app := cli.NewApp()
@@ -47,7 +55,38 @@ func main() {
 		Usage:       "list all encrypted volumes",
 		Description: ".....", // TODO: add description
 		Action: func(c *cli.Context) {
-			fmt.Printf("%q\n", lsblk())
+			w := new(tabwriter.Writer)
+			w.Init(os.Stdout, 0, 8, 2, '\t', 0)
+
+			for _, disk := range lsdsk() {
+				fmt.Fprintf(w, "Disk: %v\tSize: %v\n", bold(disk.Name), bold(disk.SizeH))
+				w.Flush()
+
+				if !disk.HasLUKS {
+					fmt.Printf("   %v\n", blink("No LUKS partition found"))
+				} else {
+					for idx, volume := range disk.Volumes {
+						if idx != len(disk.Volumes)-1 {
+							fmt.Print("  ├── ")
+						} else {
+							fmt.Print("  └── ")
+						}
+
+						mountpoint := magenta(volume.Mountpoint)
+						if volume.Mountpoint == "" {
+							mountpoint = blink(magenta("not mounted"))
+						}
+						fmt.Fprintf(w, "Partition: %v\tSize: %v\tMountpoint: %v\tUUID: %v\tLabel: %v\n",
+							magenta(volume.Name),
+							magenta(volume.SizeH),
+							mountpoint,
+							magenta(volume.Uuid),
+							magenta(volume.Label))
+						w.Flush()
+					}
+				}
+				fmt.Println()
+			}
 		},
 	}}
 
