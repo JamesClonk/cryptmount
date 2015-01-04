@@ -2,8 +2,7 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"os/exec"
+
 	"reflect"
 	"regexp"
 	"strconv"
@@ -27,14 +26,16 @@ type Disk struct {
 	Name    string
 	Size    string
 	SizeH   string
-	Volumes []Volume
+	Volumes Volumes
 	HasLUKS bool
 }
 
 type Volume struct {
 	Name       string
 	Fstype     string
+	IsLUKS     bool
 	Mountpoint string
+	IsMounted  bool
 	Label      string
 	Uuid       string
 	Partlabel  string
@@ -43,6 +44,8 @@ type Volume struct {
 	SizeH      string
 	Type       string
 }
+
+type Volumes []Volume
 
 func lsdsk() []Disk {
 	disks := make([]Disk, 0)
@@ -61,24 +64,18 @@ func lsdsk() []Disk {
 		} else {
 			// add volume to disk
 			if volume.Fstype == "crypto_LUKS" {
-				disks[len(disks)-1].Volumes = append(disks[len(disks)-1].Volumes, volume)
 				disks[len(disks)-1].HasLUKS = true
+				volume.IsLUKS = true
 			}
+			disks[len(disks)-1].Volumes = append(disks[len(disks)-1].Volumes, volume)
 		}
 	}
 
 	return disks
 }
 
-func lsblk() []Volume {
-	cmd := strings.Split(LSBLK_CMD, " ")
-	out, err := exec.Command(cmd[0], cmd[1:]...).Output()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	volumes := make([]Volume, 0)
-	for _, line := range strings.Split(string(out), "\n") {
+func lsblk() (volumes Volumes) {
+	for _, line := range strings.Split(system(LSBLK_CMD), "\n") {
 		line = strings.Trim(line, "\t\n\r ")
 		if line == "" {
 			continue
@@ -98,20 +95,21 @@ func lsblk() []Volume {
 			if field.IsValid() {
 				field.SetString(value)
 				if key == "Size" {
-					if size, err := fmtByteSize(value); err == nil {
+					if size, err := formatByteSize(value); err == nil {
 						volume.SizeH = size
 					}
 				}
 			}
 		}
 
+		volume.IsMounted = volume.Mountpoint != ""
 		volumes = append(volumes, volume)
 	}
 
-	return volumes
+	return
 }
 
-func fmtByteSize(value string) (string, error) {
+func formatByteSize(value string) (string, error) {
 	size, err := strconv.ParseFloat(value, 64)
 	if err != nil {
 		return "", err
@@ -129,4 +127,32 @@ func fmtByteSize(value string) (string, error) {
 	}
 
 	return fmt.Sprintf("%.1fB", size), nil
+}
+
+func (volumes *Volumes) filter(predicate func(Volume) bool) *Volumes {
+	var newVolumes Volumes
+	for _, volume := range *volumes {
+		if predicate(volume) {
+			newVolumes = append(newVolumes, volume)
+		}
+	}
+	return &newVolumes
+}
+
+func (volumes *Volumes) luksOnly() *Volumes {
+	return volumes.filter(func(v Volume) bool {
+		return v.IsLUKS
+	})
+}
+
+func (volumes *Volumes) mounted() *Volumes {
+	return volumes.filter(func(v Volume) bool {
+		return v.IsMounted
+	})
+}
+
+func (volumes *Volumes) unmounted() *Volumes {
+	return volumes.filter(func(v Volume) bool {
+		return !v.IsMounted
+	})
 }
