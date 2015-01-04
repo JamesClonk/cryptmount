@@ -101,7 +101,7 @@ func lsblk() (volumes Volumes) {
 			}
 		}
 
-		volume.IsMounted = volume.Mountpoint != ""
+		volume.IsMounted = volume.Mountpoint != "" // TODO: this is not correct for LUKS encrypted volumes! BUG: fix this!
 		volumes = append(volumes, volume)
 	}
 

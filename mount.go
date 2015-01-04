@@ -1,18 +1,17 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"strings"
-	"time"
 )
 
 var (
-	LUKSOPEN_CMD = `cryptsetup luksOpen %v %v`
-	MOUNT_CMD    = `mount /dev/mapper/%v %v`
+	LUKSOPEN_CMD  = `cryptsetup luksOpen %v %v`
+	LUKSCLOSE_CMD = `cryptsetup luksClose %v`
+	MOUNT_CMD     = `mount /dev/mapper/%v %v`
+	UNMOUNT_CMD   = `umount %v`
 )
 
 func mountVolume(device string, mountpoint string) {
@@ -23,39 +22,43 @@ func mountVolume(device string, mountpoint string) {
 	mount(name, mountpoint)
 }
 
+func unmountVolume(device string, mountpoint string) {
+	fmt.Printf("\nUnmount device [%v] from [%v]\n", magenta(device), magenta(mountpoint))
+
+	unmount(mountpoint)
+	luksClose(mapperName(mountpoint))
+}
+
 func luksOpen(device string, name string) {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Printf("\nEnter passphrase for %v:", device)
-	passphrase, err := reader.ReadString('\n')
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	passphrase = strings.Trim(passphrase, "\t\n\r ")
-	if passphrase == "" {
-		log.Fatalf("%v", boldRedBlinking("No passphrase given!"))
-	}
-
-	cmds := strings.Split(fmt.Sprintf(LUKSOPEN_CMD, device, name), " ")
-	cmd := exec.Command(cmds[0], cmds[1:]...)
-	//cmd := exec.Command("cryptsetup", "luksOpen", "/dev/sdc2", "sdc2")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	stdin, _ := cmd.StdinPipe()
-	stdin.Write([]byte(passphrase + "\n"))
-
-	time.AfterFunc(time.Duration(2)*time.Second, func() {
-		if !cmd.ProcessState.Exited() {
-			log.Fatalf("\n%v\n", boldRedBlinking("Incorrect passphrase!"))
+	// check if mapper name already exists, if so then close it
+	if _, err := os.Stat("/dev/mapper/" + name); err != nil {
+		if !os.IsNotExist(err) {
+			log.Fatal(err)
 		}
-	})
+	} else {
+		luksClose(name)
+	}
 
-	cmd.Run()
+	interactive(fmt.Sprintf(LUKSOPEN_CMD, device, name))
+}
+
+func luksClose(name string) {
+	interactive(fmt.Sprintf(LUKSCLOSE_CMD, name))
 }
 
 func mount(name string, mountpoint string) {
-	out := system(fmt.Sprintf(MOUNT_CMD, name, mountpoint))
-	fmt.Println(out)
+	// check if mountpoint directory exists, if not then create it
+	if _, err := os.Stat(mountpoint); os.IsNotExist(err) {
+		if err := os.Mkdir(mountpoint, 0750); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	interactive(fmt.Sprintf(MOUNT_CMD, name, mountpoint))
+}
+
+func unmount(mountpoint string) {
+	interactive(fmt.Sprintf(UNMOUNT_CMD, mountpoint))
 }
 
 func mapperName(path string) string {

@@ -37,7 +37,15 @@ func main() {
 		Usage:       "mount an encrypted volumes",
 		Description: ".....", // TODO: add description
 		Action: func(c *cli.Context) {
-			mountDevices(c)
+			mountDevice(c)
+		},
+	}, {
+		Name:        "mount-all",
+		ShortName:   "ma",
+		Usage:       "mount all encrypted volumes",
+		Description: ".....", // TODO: add description
+		Action: func(c *cli.Context) {
+			//mountDevices(c)
 		},
 	}, {
 		Name:        "unmount",
@@ -45,7 +53,7 @@ func main() {
 		Usage:       "unmount an encrypted volumes",
 		Description: ".....", // TODO: add description
 		Action: func(c *cli.Context) {
-			println("unmount: ", c.Args().First())
+			unmountDevice(c)
 		},
 	}, {
 		Name:        "unmount-all",
@@ -72,7 +80,7 @@ func main() {
 	app.RunAndExitOnError()
 }
 
-func mountDevices(c *cli.Context) {
+func mountDevice(c *cli.Context) {
 	if !c.Args().Present() {
 		volumes := listDevices()
 		unmountedVolumes := *volumes.unmounted()
@@ -90,9 +98,39 @@ func mountDevices(c *cli.Context) {
 			volume := unmountedVolumes[choice]
 			mountpoint := "/mnt/" + strings.Replace(strings.TrimLeft(volume.Name, "/dev/"), "/", "_", -1)
 			mountVolume(volume.Name, mountpoint)
+		} else {
+			fmt.Printf("%v\n", boldRedBlinking("No volumes to mount were found"))
+			os.Exit(7)
 		}
 	} else {
 		fmt.Println("mount directly", c.Args()) // TODO: mount directly with given arguments
+	}
+}
+
+func unmountDevice(c *cli.Context) {
+	if !c.Args().Present() {
+		volumes := listDevices()
+		mountedVolumes := *volumes.mounted()
+
+		if len(mountedVolumes) > 0 {
+			fmt.Printf("\n******************************************************\n")
+			fmt.Printf("Which volume to unmount?\n\n")
+			for idx, volume := range mountedVolumes {
+				fmt.Printf("%v: %v\n", red(strconv.Itoa(idx)), bold(volume.Name))
+			}
+
+			choice := chooseVolume()
+			fmt.Println(choice)
+
+			volume := mountedVolumes[choice]
+			mountpoint := "/mnt/" + strings.Replace(strings.TrimLeft(volume.Name, "/dev/"), "/", "_", -1)
+			unmountVolume(volume.Name, mountpoint)
+		} else {
+			fmt.Printf("%v\n", boldRedBlinking("No mounted volumes were found"))
+			os.Exit(8)
+		}
+	} else {
+		fmt.Println("unmount directly", c.Args()) // TODO: unmount directly with given arguments
 	}
 }
 
