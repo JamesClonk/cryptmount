@@ -62,7 +62,8 @@ func lsdsk() []Disk {
 			disks = append(disks, disk)
 		} else {
 			// add volume to disk
-			if volume.Fstype == "crypto_LUKS" {
+			// TODO: if crypto_LUKS, then check the volume that follows if it is type "crypt" and was mounted from this one (/dev/mapper/*)
+			if volume.Fstype == "crypto_LUKS" || volume.Type == "crypt" {
 				disks[len(disks)-1].HasLUKS = true
 				volume.IsLUKS = true
 			}
@@ -101,7 +102,7 @@ func lsblk() (volumes Volumes) {
 			}
 		}
 
-		volume.IsMounted = volume.Mountpoint != "" // TODO: this is not correct for LUKS encrypted volumes! BUG: fix this!
+		volume.IsMounted = volume.Mountpoint != ""
 		volumes = append(volumes, volume)
 	}
 
