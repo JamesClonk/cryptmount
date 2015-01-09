@@ -46,6 +46,7 @@ type Volume struct {
 
 type Volumes []Volume
 
+# TODO: use ginkgo for writing test cases
 func lsdsk() []Disk {
 	disks := make([]Disk, 0)
 
