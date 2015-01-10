@@ -138,7 +138,7 @@ func listDevices() (result Volumes) {
 	w := new(tabwriter.Writer)
 	w.Init(os.Stdout, 0, 8, 2, '\t', 0)
 
-	for _, disk := range lsdsk() {
+	for _, disk := range Lsdsk() {
 		fmt.Fprintf(w, "Disk: %v\tSize: %v\n", bold(disk.Name), bold(disk.SizeH))
 		w.Flush()
 
@@ -148,22 +148,45 @@ func listDevices() (result Volumes) {
 			volumes := disk.Volumes.luksOnly()
 			for idx, volume := range *volumes {
 				if idx != len(*volumes)-1 {
-					fmt.Print("  ├── ")
+					fmt.Print("  ├──  ")
 				} else {
-					fmt.Print("  └── ")
+					fmt.Print("  └──  ")
 				}
 
-				mountpoint := magenta(volume.Mountpoint)
-				if !volume.IsMounted {
-					mountpoint = blink(magenta("not mounted"))
+				mappedName := magenta(volume.MappedName)
+				if !volume.IsMapped {
+					mappedName = blink(magenta("not mapped"))
 				}
 				fmt.Fprintf(w, "Partition: %v\tSize: %v\tMountpoint: %v\tUUID: %v\tLabel: %v\n",
 					magenta(volume.Name),
 					magenta(volume.SizeH),
-					mountpoint,
+					mappedName,
 					magenta(volume.Uuid),
 					magenta(volume.Label))
 				w.Flush()
+
+				// check for mapped volumes
+				if len(volume.MappedVolumes) > 0 {
+					for midx, mappedVolume := range volume.MappedVolumes {
+						if midx != len(volume.MappedVolumes)-1 {
+							fmt.Print("    ├─ ")
+						} else {
+							fmt.Print("    └─ ")
+						}
+
+						mountpoint := magenta(mappedVolume.Mountpoint)
+						if !mappedVolume.IsMounted {
+							mountpoint = blink(magenta("not mounted"))
+						}
+						fmt.Fprintf(w, "Partition: %v\tSize: %v\tMountpoint: %v\tUUID: %v\tLabel: %v\n",
+							magenta(mappedVolume.Name),
+							magenta(mappedVolume.SizeH),
+							mountpoint,
+							magenta(mappedVolume.Uuid),
+							magenta(mappedVolume.Label))
+						w.Flush()
+					}
+				}
 
 				result = append(result, volume)
 			}

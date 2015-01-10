@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -30,15 +32,28 @@ type Disk struct {
 }
 
 type Volume struct {
+	Name          string
+	Fstype        string
+	IsLUKS        bool
+	MappedName    string
+	IsMapped      bool
+	MappedVolumes []MappedVolume
+	Mountpoint    string
+	IsMounted     bool
+	Label         string
+	Uuid          string
+	Size          string
+	SizeH         string
+	Type          string
+}
+
+type MappedVolume struct {
 	Name       string
 	Fstype     string
-	IsLUKS     bool
 	Mountpoint string
 	IsMounted  bool
 	Label      string
 	Uuid       string
-	Partlabel  string
-	Partuuid   string
 	Size       string
 	SizeH      string
 	Type       string
@@ -46,8 +61,7 @@ type Volume struct {
 
 type Volumes []Volume
 
-# TODO: use ginkgo for writing test cases
-func lsdsk() []Disk {
+func Lsdsk() []Disk {
 	disks := make([]Disk, 0)
 
 	var disk Disk
@@ -63,10 +77,8 @@ func lsdsk() []Disk {
 			disks = append(disks, disk)
 		} else {
 			// add volume to disk
-			// TODO: if crypto_LUKS, then check the volume that follows if it is type "crypt" and was mounted from this one (/dev/mapper/*)
-			if volume.Fstype == "crypto_LUKS" || volume.Type == "crypt" {
+			if volume.IsLUKS {
 				disks[len(disks)-1].HasLUKS = true
-				volume.IsLUKS = true
 			}
 			disks[len(disks)-1].Volumes = append(disks[len(disks)-1].Volumes, volume)
 		}
@@ -82,32 +94,84 @@ func lsblk() (volumes Volumes) {
 			continue
 		}
 
-		volume := Volume{}
-		vol := reflect.ValueOf(&volume).Elem()
+		if strings.Contains(line, `TYPE="crypt"`) {
+			// mapped value
+			volume := MappedVolume{}
+			vol := reflect.ValueOf(&volume).Elem()
+			parseVolume(line, vol)
 
-		pairs := LSBLK_RX.FindAllStringSubmatch(line, -1)
-		for _, pair := range pairs {
-			if len(pair) != 3 {
-				continue
+			// volume checks
+			volume.IsMounted = volume.Mountpoint != ""
+
+			// volumes[len(volumes)-1] => parent
+			if !volumes[len(volumes)-1].IsMapped {
+				// serious problem!
+				// how can I have a mounted and open decrypted volume, if parent LUKS volume is not mapped?
+				log.Fatalf("Parent LUKS volume for %v is not mapped!\n", volume.Name)
 			}
 
-			key, value := strings.Title(strings.ToLower(pair[1])), pair[2]
-			field := vol.FieldByName(key)
-			if field.IsValid() {
-				field.SetString(value)
-				if key == "Size" {
-					if size, err := formatByteSize(value); err == nil {
-						volume.SizeH = size
+			volumes[len(volumes)-1].MappedVolumes = append(volumes[len(volumes)-1].MappedVolumes, volume)
+
+		} else {
+			// normal volume
+			volume := Volume{}
+			vol := reflect.ValueOf(&volume).Elem()
+			parseVolume(line, vol)
+
+			// volume checks
+			volume.IsMounted = volume.Mountpoint != ""
+			if volume.Fstype == "crypto_LUKS" { // LUKS volume
+				volume.IsLUKS = true
+				// check if it is mapped
+				exists, mappedName := checkMapped(volume.Name)
+				if exists {
+					volume.IsMapped = true
+					volume.MappedName = "/dev/mapper/" + mappedName
+				}
+			}
+
+			volumes = append(volumes, volume)
+		}
+	}
+
+	return
+}
+
+func parseVolume(line string, vol reflect.Value) {
+	pairs := LSBLK_RX.FindAllStringSubmatch(line, -1)
+	for _, pair := range pairs {
+		if len(pair) != 3 {
+			continue
+		}
+
+		key, value := strings.Title(strings.ToLower(pair[1])), pair[2]
+		field := vol.FieldByName(key)
+		if field.IsValid() {
+			field.SetString(value)
+			if key == "Size" { // human readable format for size
+				if size, err := formatByteSize(value); err == nil {
+					field2 := vol.FieldByName("SizeH")
+					if field2.IsValid() {
+						field2.SetString(size)
 					}
 				}
 			}
 		}
-
-		volume.IsMounted = volume.Mountpoint != ""
-		volumes = append(volumes, volume)
 	}
+}
 
-	return
+func checkMapped(name string) (bool, string) {
+	name = mapperName(strings.TrimLeft(name, "/dev/"))
+
+	_, err := os.Stat("/dev/" + name)
+	if err == nil {
+		return true, name
+	}
+	if os.IsNotExist(err) {
+		return false, name
+	}
+	log.Fatal(err)
+	return false, ""
 }
 
 func formatByteSize(value string) (string, error) {
