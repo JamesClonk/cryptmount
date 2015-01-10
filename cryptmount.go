@@ -13,7 +13,7 @@ import (
 	"github.com/fatih/color"
 )
 
-const VERSION = "0.0.1"
+const VERSION = "1.0.0"
 
 var (
 	blink           = color.New(color.BlinkSlow).SprintfFunc()
@@ -45,7 +45,7 @@ func main() {
 		Usage:       "mount all encrypted volumes",
 		Description: ".....", // TODO: add description
 		Action: func(c *cli.Context) {
-			//mountDevices(c)
+			mountAllDevices(c)
 		},
 	}, {
 		Name:        "unmount",
@@ -61,7 +61,7 @@ func main() {
 		Usage:       "unmount all encrypted volumes",
 		Description: ".....", // TODO: add description
 		Action: func(c *cli.Context) {
-			println("unmount-all: ", c.Args().First())
+			unmountAllDevices(c)
 		},
 	}, {
 		Name:        "list",
@@ -81,56 +81,54 @@ func main() {
 }
 
 func mountDevice(c *cli.Context) {
-	if !c.Args().Present() {
-		volumes := listDevices()
-		unmountedVolumes := *volumes.unmounted()
+	volumes := listDevices()
+	unmountedVolumes := *volumes.unmounted()
 
-		if len(unmountedVolumes) > 0 {
-			fmt.Printf("\n******************************************************\n")
-			fmt.Printf("Which volume to mount?\n\n")
-			for idx, volume := range unmountedVolumes {
-				fmt.Printf("%v: %v\n", red(strconv.Itoa(idx)), bold(volume.Name))
-			}
-
-			choice := chooseVolume()
-			fmt.Println(choice)
-
-			volume := unmountedVolumes[choice]
-			mountpoint := "/mnt/" + strings.Replace(strings.TrimLeft(volume.Name, "/dev/"), "/", "_", -1)
-			mountVolume(volume.Name, mountpoint)
-		} else {
-			fmt.Printf("%v\n", boldRedBlinking("No volumes to mount were found"))
-			os.Exit(7)
+	if len(unmountedVolumes) > 0 {
+		fmt.Printf("\n******************************************************\n")
+		fmt.Printf("Which volume to mount?\n\n")
+		for idx, volume := range unmountedVolumes {
+			fmt.Printf("%v: %v\n", red(strconv.Itoa(idx)), bold(volume.Name))
 		}
+
+		choice := chooseVolume()
+		mountVolume(unmountedVolumes[choice])
 	} else {
-		fmt.Println("mount directly", c.Args()) // TODO: mount directly with given arguments
+		fmt.Printf("%v\n", boldRedBlinking("No volumes to mount were found"))
+		os.Exit(7)
+	}
+}
+
+func mountAllDevices(c *cli.Context) {
+	volumes := listDevices()
+	for _, volume := range *volumes.unmounted() {
+		mountVolume(volume)
 	}
 }
 
 func unmountDevice(c *cli.Context) {
-	if !c.Args().Present() {
-		volumes := listDevices()
-		mountedVolumes := *volumes.mounted()
+	volumes := listDevices()
+	mountedVolumes := *volumes.mounted()
 
-		if len(mountedVolumes) > 0 {
-			fmt.Printf("\n******************************************************\n")
-			fmt.Printf("Which volume to unmount?\n\n")
-			for idx, volume := range mountedVolumes {
-				fmt.Printf("%v: %v\n", red(strconv.Itoa(idx)), bold(volume.Name))
-			}
-
-			choice := chooseVolume()
-			fmt.Println(choice)
-
-			volume := mountedVolumes[choice]
-			mountpoint := "/mnt/" + strings.Replace(strings.TrimLeft(volume.Name, "/dev/"), "/", "_", -1)
-			unmountVolume(volume.Name, mountpoint)
-		} else {
-			fmt.Printf("%v\n", boldRedBlinking("No mounted volumes were found"))
-			os.Exit(8)
+	if len(mountedVolumes) > 0 {
+		fmt.Printf("\n******************************************************\n")
+		fmt.Printf("Which volume to unmount?\n\n")
+		for idx, volume := range mountedVolumes {
+			fmt.Printf("%v: %v\n", red(strconv.Itoa(idx)), bold(volume.Name))
 		}
+
+		choice := chooseVolume()
+		unmountVolume(mountedVolumes[choice])
 	} else {
-		fmt.Println("unmount directly", c.Args()) // TODO: unmount directly with given arguments
+		fmt.Printf("%v\n", boldRedBlinking("No mounted volumes were found"))
+		os.Exit(8)
+	}
+}
+
+func unmountAllDevices(c *cli.Context) {
+	volumes := listDevices()
+	for _, volume := range *volumes.mounted() {
+		unmountVolume(volume)
 	}
 }
 
@@ -143,14 +141,14 @@ func listDevices() (result Volumes) {
 		w.Flush()
 
 		if !disk.HasLUKS {
-			fmt.Printf("   %v\n", blink("No LUKS partition found"))
+			fmt.Printf("   %v\n", "No LUKS partition found")
 		} else {
 			volumes := disk.Volumes.luksOnly()
 			for idx, volume := range *volumes {
 				if idx != len(*volumes)-1 {
-					fmt.Print("  ├──  ")
+					fmt.Print("  ├── ")
 				} else {
-					fmt.Print("  └──  ")
+					fmt.Print("  └── ")
 				}
 
 				mappedName := magenta(volume.MappedName)
@@ -169,9 +167,9 @@ func listDevices() (result Volumes) {
 				if len(volume.MappedVolumes) > 0 {
 					for midx, mappedVolume := range volume.MappedVolumes {
 						if midx != len(volume.MappedVolumes)-1 {
-							fmt.Print("    ├─ ")
+							fmt.Print("   ├─ ")
 						} else {
-							fmt.Print("    └─ ")
+							fmt.Print("   └─ ")
 						}
 
 						mountpoint := magenta(mappedVolume.Mountpoint)

@@ -14,7 +14,10 @@ var (
 	UNMOUNT_CMD   = `umount %v`
 )
 
-func mountVolume(device string, mountpoint string) {
+func mountVolume(volume Volume) {
+	device := volume.Name
+	mountpoint := "/mnt/" + strings.Replace(strings.TrimLeft(volume.Name, "/dev/"), "/", "_", -1)
+
 	fmt.Printf("\nMount [%v] to [%v]\n", magenta(device), magenta(mountpoint))
 
 	name := mapperName(mountpoint)
@@ -22,7 +25,10 @@ func mountVolume(device string, mountpoint string) {
 	mount(name, mountpoint)
 }
 
-func unmountVolume(device string, mountpoint string) {
+func unmountVolume(volume Volume) {
+	device := volume.Name
+	mountpoint := "/mnt/" + strings.Replace(strings.TrimLeft(volume.Name, "/dev/"), "/", "_", -1)
+
 	fmt.Printf("\nUnmount device [%v] from [%v]\n", magenta(device), magenta(mountpoint))
 
 	unmount(mountpoint)
@@ -62,5 +68,7 @@ func unmount(mountpoint string) {
 }
 
 func mapperName(path string) string {
+	path = strings.Replace(strings.TrimLeft(path, "/mnt/"), "/", "_", -1)
+	path = strings.Replace(strings.TrimLeft(path, "/dev/"), "/", "_", -1)
 	return strings.Replace(strings.TrimLeft(path, "/"), "/", "_", -1)
 }

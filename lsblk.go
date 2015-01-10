@@ -2,8 +2,7 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"os"
+
 	"reflect"
 	"regexp"
 	"strconv"
@@ -104,15 +103,12 @@ func lsblk() (volumes Volumes) {
 			volume.IsMounted = volume.Mountpoint != ""
 
 			// volumes[len(volumes)-1] => parent
-			if !volumes[len(volumes)-1].IsMapped {
-				// serious problem!
-				// how can I have a mounted and open decrypted volume, if parent LUKS volume is not mapped?
-				log.Fatalf("Parent LUKS volume for %v is not mapped!\n", volume.Name)
-			}
-
+			volumes[len(volumes)-1].IsMapped = true
+			volumes[len(volumes)-1].MappedName = volume.Name
+			volumes[len(volumes)-1].IsMounted = true
 			volumes[len(volumes)-1].MappedVolumes = append(volumes[len(volumes)-1].MappedVolumes, volume)
 
-		} else {
+		} else if strings.Contains(line, `TYPE="disk"`) || strings.Contains(line, `TYPE="part"`) {
 			// normal volume
 			volume := Volume{}
 			vol := reflect.ValueOf(&volume).Elem()
@@ -122,12 +118,6 @@ func lsblk() (volumes Volumes) {
 			volume.IsMounted = volume.Mountpoint != ""
 			if volume.Fstype == "crypto_LUKS" { // LUKS volume
 				volume.IsLUKS = true
-				// check if it is mapped
-				exists, mappedName := checkMapped(volume.Name)
-				if exists {
-					volume.IsMapped = true
-					volume.MappedName = "/dev/mapper/" + mappedName
-				}
 			}
 
 			volumes = append(volumes, volume)
@@ -158,20 +148,6 @@ func parseVolume(line string, vol reflect.Value) {
 			}
 		}
 	}
-}
-
-func checkMapped(name string) (bool, string) {
-	name = mapperName(strings.TrimLeft(name, "/dev/"))
-
-	_, err := os.Stat("/dev/" + name)
-	if err == nil {
-		return true, name
-	}
-	if os.IsNotExist(err) {
-		return false, name
-	}
-	log.Fatal(err)
-	return false, ""
 }
 
 func formatByteSize(value string) (string, error) {
